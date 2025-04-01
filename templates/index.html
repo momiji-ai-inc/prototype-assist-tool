@@ -1,0 +1,387 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mb-5">
+    <div class="col-lg-8 mx-auto text-center">
+        <h1 class="display-4 mb-3">AI広告クリエイティブ分析</h1>
+        <p class="lead mb-4">広告クリエイティブ画像をアップロードして、AIによる効果的な改善提案を得ましょう</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-10 mx-auto">
+        <div class="card shadow mb-5">
+            <div class="card-body p-4">
+                <h2 class="card-title mb-4"><i class="fas fa-cloud-upload-alt me-2"></i>広告クリエイティブのアップロード</h2>
+                
+                <form action="{{ url_for('analyze') }}" method="post" enctype="multipart/form-data" id="upload-form">
+                    <div class="mb-4">
+                        <div class="upload-area p-5 text-center border rounded" id="upload-area">
+                            <i class="fas fa-file-image fa-3x mb-3 text-muted"></i>
+                            <p class="mb-2">画像をここにドラッグ＆ドロップするか、クリックして選択</p>
+                            <p class="small text-muted">対応フォーマット：JPG、PNG、GIF（最大10MB）</p>
+                            <input type="file" name="file" id="file-input" class="d-none" accept=".jpg,.jpeg,.png,.gif">
+                            <button type="button" class="btn btn-outline-primary mt-2" id="browse-button">
+                                <i class="fas fa-folder-open me-2"></i>ファイルを選択
+                            </button>
+                        </div>
+                        <div id="file-preview" class="mt-3 d-none">
+                            <div class="d-flex align-items-center">
+                                <div class="preview-thumbnail me-3">
+                                    <img src="" alt="プレビュー" id="image-preview" class="img-thumbnail" style="max-height: 100px;">
+                                </div>
+                                <div>
+                                    <p class="mb-1" id="file-name"></p>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="remove-file">
+                                        <i class="fas fa-times me-1"></i>削除
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center">
+                        <button type="submit" class="btn btn-primary px-4 py-2" id="analyze-button" disabled>
+                            <i class="fas fa-magic me-2"></i>クリエイティブを分析
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="loading" class="text-center my-5 d-none">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3">AIで広告クリエイティブを分析中...</p>
+                    <div class="progress mt-3" style="height: 20px;">
+                        <div id="analysis-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <p class="small text-muted mt-2">画像の分析には20〜30秒ほどかかります</p>
+                </div>
+            </div>
+        </div>
+        
+        {% if analysis %}
+        <div class="card shadow mb-5" id="results-card">
+            <div class="card-body p-4">
+                <h2 class="card-title mb-4"><i class="fas fa-chart-bar me-2"></i>分析結果</h2>
+                
+                <div class="row">
+                    <div class="col-md-4 mb-4">
+                        <div class="text-center">
+                            <img src="data:image/jpeg;base64,{{ image_data }}" alt="アップロードされた広告" class="img-fluid rounded shadow-sm mb-3" style="max-height: 300px;">
+                            <p class="small text-muted">アップロードされた広告</p>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-8">
+                        {% set analysis_json = analysis | tojson | safe %}
+                        <div id="analysis-data" data-analysis='{{ analysis_json }}'>
+                            <script>
+                                document.addEventListener('DOMContentLoaded', function() {
+                                    try {
+                                        const analysisData = JSON.parse(document.getElementById('analysis-data').dataset.analysis);
+                                        // Parse the analysis data again as it might be a JSON string
+                                        const parsedData = typeof analysisData === 'string' ? JSON.parse(analysisData) : analysisData;
+                                        displayAnalysisResults(parsedData);
+                                    } catch (error) {
+                                        console.error('Error parsing analysis data:', error);
+                                        document.getElementById('analysis-results').innerHTML = `
+                                            <div class="alert alert-danger">
+                                                <h4 class="alert-heading">エラーが発生しました</h4>
+                                                <p>分析結果の処理中にエラーが発生しました。もう一度お試しください。</p>
+                                            </div>
+                                        `;
+                                    }
+                                });
+                            </script>
+                        </div>
+                        
+                        <div id="analysis-results">
+                            <!-- Results will be populated via JavaScript -->
+                            <div class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Loading results...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // This script handles the file upload UI interactions
+    document.addEventListener('DOMContentLoaded', function() {
+        const uploadForm = document.getElementById('upload-form');
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const browseButton = document.getElementById('browse-button');
+        const filePreview = document.getElementById('file-preview');
+        const imagePreview = document.getElementById('image-preview');
+        const fileName = document.getElementById('file-name');
+        const removeFileButton = document.getElementById('remove-file');
+        const analyzeButton = document.getElementById('analyze-button');
+        const loadingSpinner = document.getElementById('loading');
+        
+        // Open file dialog when clicking the upload area or browse button
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+        
+        browseButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fileInput.click();
+        });
+        
+        // Handle file selection
+        fileInput.addEventListener('change', function() {
+            handleFileSelection(this.files);
+        });
+        
+        // Handle drag and drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+        
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, highlight, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, unhighlight, false);
+        });
+        
+        function highlight() {
+            uploadArea.classList.add('border-primary');
+        }
+        
+        function unhighlight() {
+            uploadArea.classList.remove('border-primary');
+        }
+        
+        uploadArea.addEventListener('drop', function(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFileSelection(files);
+        });
+        
+        // Handle the selected file
+        function handleFileSelection(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                
+                // Check file type
+                const fileType = file.type.split('/')[1];
+                const validTypes = ['jpeg', 'jpg', 'png', 'gif'];
+                
+                if (!validTypes.includes(fileType.toLowerCase())) {
+                    alert('有効な画像ファイル（JPG、PNG、GIF）を選択してください。');
+                    return;
+                }
+                
+                // Check file size (max 10MB)
+                if (file.size > 10 * 1024 * 1024) {
+                    alert('ファイルサイズが10MBを超えています。より小さいファイルを選択してください。');
+                    return;
+                }
+                
+                // Show file preview
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    filePreview.classList.remove('d-none');
+                    fileName.textContent = file.name;
+                    analyzeButton.disabled = false;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        // Remove selected file
+        removeFileButton.addEventListener('click', function() {
+            fileInput.value = '';
+            filePreview.classList.add('d-none');
+            analyzeButton.disabled = true;
+        });
+        
+        // Show loading spinner on form submission
+        uploadForm.addEventListener('submit', function() {
+            loadingSpinner.classList.remove('d-none');
+            analyzeButton.disabled = true;
+        });
+    });
+    
+    // Function to display analysis results
+    function displayAnalysisResults(analysis) {
+        const resultsContainer = document.getElementById('analysis-results');
+        
+        // Format the analysis data into HTML
+        let html = `
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="h5 mb-0">総合評価</h3>
+                    <div class="ratings">`;
+        
+        // Generate stars for overall rating
+        const rating = analysis.overall_rating;
+        const maxRating = 10;
+        const ratingPercentage = (rating / maxRating) * 100;
+        
+        html += `
+                        <div class="progress" style="height: 30px; width: 200px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: ${ratingPercentage}%;" 
+                                aria-valuenow="${rating}" aria-valuemin="0" aria-valuemax="${maxRating}">
+                                ${rating}/10
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-success bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-thumbs-up me-2"></i>強み</h4>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">`;
+        
+        // Add strengths
+        analysis.strengths.forEach(strength => {
+            html += `<li class="list-group-item bg-transparent"><i class="fas fa-check text-success me-2"></i>${strength}</li>`;
+        });
+        
+        html += `
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-danger bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-thumbs-down me-2"></i>弱み</h4>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">`;
+        
+        // Add weaknesses
+        analysis.weaknesses.forEach(weakness => {
+            html += `<li class="list-group-item bg-transparent"><i class="fas fa-times text-danger me-2"></i>${weakness}</li>`;
+        });
+        
+        html += `
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mb-4">
+                <div class="card-header bg-primary bg-opacity-25">
+                    <h4 class="h6 mb-0"><i class="fas fa-lightbulb me-2"></i>改善提案</h4>
+                </div>
+                <div class="card-body">
+                    <div class="row">`;
+        
+        // Add improvement suggestions
+        analysis.improvement_suggestions.forEach((suggestion, index) => {
+            html += `
+                        <div class="col-md-6 mb-3">
+                            <div class="d-flex">
+                                <div class="me-2">
+                                    <span class="badge rounded-pill bg-primary">${index + 1}</span>
+                                </div>
+                                <div>
+                                    ${suggestion}
+                                </div>
+                            </div>
+                        </div>`;
+        });
+        
+        html += `
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-info bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-users me-2"></i>ターゲット層</h4>
+                        </div>
+                        <div class="card-body">
+                            <p>${analysis.target_audience}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-warning bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-chart-line me-2"></i>効果スコア</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center">
+                                <div class="display-4 fw-bold">${analysis.effectiveness_score}/10</div>
+                                <p class="text-muted small">メッセージの明確さ、視覚的な魅力、コンバージョン可能性に基づく</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-mouse-pointer me-2"></i>推定CTR（クリック率）</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <div class="display-4 fw-bold">${analysis.estimated_ctr}</div>
+                                <p class="text-muted small">広告がクリックされる確率の推定値</p>
+                            </div>
+                            <div class="mt-2">
+                                <h6 class="fw-bold text-primary"><i class="fas fa-info-circle me-1"></i>根拠：</h6>
+                                <p class="small">${analysis.ctr_reasoning}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-secondary bg-opacity-25">
+                            <h4 class="h6 mb-0"><i class="fas fa-coins me-2"></i>推定CPA（獲得単価）</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center mb-3">
+                                <div class="display-4 fw-bold">${analysis.estimated_cpa}</div>
+                                <p class="text-muted small">コンバージョン1件あたりのコスト推定値</p>
+                            </div>
+                            <div class="mt-2">
+                                <h6 class="fw-bold text-secondary"><i class="fas fa-info-circle me-1"></i>根拠：</h6>
+                                <p class="small">${analysis.cpa_reasoning}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        resultsContainer.innerHTML = html;
+    }
+</script>
+{% endblock %}
