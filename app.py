@@ -192,5 +192,5 @@ def analyze():
         flash(f'画像処理中にエラーが発生しました: {str(e)}', 'danger')
         return redirect(url_for('index'))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5001, debug=True)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5001, debug=True, use_reloader=False)
