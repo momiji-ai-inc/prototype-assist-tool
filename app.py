@@ -167,6 +167,14 @@ def analyze():
     if not allowed_file(file.filename):
         flash(f'ファイル形式が許可されていません。アップロード可能な形式: {", ".join(ALLOWED_EXTENSIONS)}', 'danger')
         return redirect(url_for('index'))
+
+    # ファイルサイズチェックを追加
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > MAX_FILE_SIZE:
+        flash('ファイルサイズが10MBを超えています', 'danger')
+        return redirect(url_for('index'))
     
     # Process the image
     try:
