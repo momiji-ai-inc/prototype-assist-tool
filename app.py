@@ -77,7 +77,7 @@ def analyze_ad_creative(image_base64):
         
         logging.debug("Sending request to OpenAI API...")
         response = client.chat.completions.create(
-            model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
+            model=os.environ.get("OPENAI_MODEL"),
             messages=[
                 {
                     "role": "system",
